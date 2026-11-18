@@ -1,3 +1,4 @@
+
 const translations = {
  ar: {
   nav_matches:"المباريات",nav_news:"الأخبار",nav_streams:"البث الرسمي",eyebrow:"منصة كرة القدم",
@@ -36,83 +37,267 @@ const translations = {
   stream_link:"Visiter la source officielle",updated:"Mis à jour"
  }
 };
+
 let lang = localStorage.getItem("koora-lang") || "ar";
 let activeFilter = "all";
+
 const $ = s => document.querySelector(s);
 const t = key => translations[lang][key] || key;
 
-function setLanguage(next) {
-  lang = next; localStorage.setItem("koora-lang", lang);
-  document.documentElement.lang = lang;
-  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
-  const frPages = {"about.html":"about-fr.html","privacy.html":"privacy-fr.html","terms.html":"terms-fr.html","contact.html":"contact-fr.html","article-stats.html":"article-stats-fr.html","article-tactics.html":"article-tactics-fr.html"};
-  document.querySelectorAll(".footer-links a, .news-body a").forEach(a => {
-    const base = a.getAttribute("href");
-    if (base && frPages[base]) a.setAttribute("href", lang === "fr" ? frPages[base] : base);
-  });
-  $("#langToggle").textContent = lang === "ar" ? "FR" : "ع";
-  renderMatches(window.kooraMatches || demoMatches);
-  renderStreams();
-}
 const demoMatches = [
  {league:"Champions League",home:"Real Madrid",away:"Manchester City",homeScore:1,awayScore:1,status:"LIVE",elapsed:62},
  {league:"Premier League",home:"Arsenal",away:"Liverpool",homeScore:null,awayScore:null,status:"NS",time:"20:00"},
  {league:"La Liga",home:"Barcelona",away:"Atlético Madrid",homeScore:2,awayScore:0,status:"FT"}
 ];
+
+function setLanguage(next) {
+ lang = next;
+ localStorage.setItem("koora-lang", lang);
+
+ document.documentElement.lang = lang;
+ document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+
+ document.querySelectorAll("[data-i18n]").forEach(el => {
+  el.textContent = t(el.dataset.i18n);
+ });
+
+ const frPages = {
+  "about.html":"about-fr.html",
+  "privacy.html":"privacy-fr.html",
+  "terms.html":"terms-fr.html",
+  "contact.html":"contact-fr.html",
+  "article-stats.html":"article-stats-fr.html",
+  "article-tactics.html":"article-tactics-fr.html"
+ };
+
+ document.querySelectorAll(".footer-links a, .news-body a").forEach(a => {
+  const base = a.getAttribute("href");
+  if (base && frPages[base]) {
+   a.setAttribute("href", lang === "fr" ? frPages[base] : base);
+  }
+ });
+
+ $("#langToggle").textContent = lang === "ar" ? "FR" : "ع";
+
+ renderMatches(window.kooraMatches || demoMatches);
+ renderStreams();
+}
+
 function statusGroup(m) {
- const s=m.fixture?.status?.short || m.status;
- if(["1H","2H","HT","ET","BT","P","LIVE"].includes(s)) return "live";
- if(["FT","AET","PEN"].includes(s)) return "finished";
+ const s = m.fixture?.status?.short || m.status;
+
+ if (["1H","2H","HT","ET","BT","P","LIVE"].includes(s)) {
+  return "live";
+ }
+
+ if (["FT","AET","PEN"].includes(s)) {
+  return "finished";
+ }
+
  return "scheduled";
 }
+
 function normalizeApi(data) {
- return (data.response || []).map(x => ({
-  league:x.league?.name || "Football", home:x.teams?.home?.name || "Home",
-  away:x.teams?.away?.name || "Away", homeScore:x.goals?.home, awayScore:x.goals?.away,
-  status:x.fixture?.status?.short || "NS", elapsed:x.fixture?.status?.elapsed,
-  time:x.fixture?.date ? new Date(x.fixture.date).toLocaleTimeString(lang==="ar"?"ar":"fr-FR",{hour:"2-digit",minute:"2-digit"}) : ""
- }));
+ const seen = new Set();
+
+ return (data.response || [])
+  .filter(x => {
+   const id = x.fixture?.id;
+   if (id && seen.has(id)) return false;
+   if (id) seen.add(id);
+   return true;
+  })
+  .map(x => ({
+   id: x.fixture?.id || null,
+   league: x.league?.name || "Football",
+   home: x.teams?.home?.name || "Home",
+   away: x.teams?.away?.name || "Away",
+   homeScore: x.goals?.home,
+   awayScore: x.goals?.away,
+   status: x.fixture?.status?.short || "NS",
+   elapsed: x.fixture?.status?.elapsed,
+   time: x.fixture?.date
+    ? new Date(x.fixture.date).toLocaleTimeString(
+       lang === "ar" ? "ar" : "fr-FR",
+       {hour:"2-digit",minute:"2-digit"}
+      )
+    : ""
+  }));
 }
+
+function sortMatches(matches) {
+ const order = {
+  live: 0,
+  scheduled: 1,
+  finished: 2
+ };
+
+ return [...matches].sort((a, b) => {
+  const groupA = order[statusGroup(a)];
+  const groupB = order[statusGroup(b)];
+
+  if (groupA !== groupB) return groupA - groupB;
+
+  if (statusGroup(a) === "scheduled") {
+   return (a.time || "").localeCompare(b.time || "");
+  }
+
+  return 0;
+ });
+}
+
 function renderMatches(matches) {
- const filtered = matches.filter(m => activeFilter==="all" || statusGroup(m)===activeFilter);
- const grid=$("#matchesGrid");
- if(!filtered.length){grid.innerHTML=`<div class="empty-state">${t("no_matches")}</div>`;return;}
- grid.innerHTML=filtered.map(m=>{
-  const group=statusGroup(m), live=group==="live", finished=group==="finished";
-  const score=(m.homeScore ?? "-")+" : "+(m.awayScore ?? "-");
-  const status=live ? `${t("live")} ${m.elapsed ?? ""}${m.elapsed ? "′" : ""}` : finished ? t("finished") : (m.time || t("scheduled"));
+ const sorted = sortMatches(matches);
+
+ const filtered = sorted.filter(m =>
+  activeFilter === "all" || statusGroup(m) === activeFilter
+ );
+
+ const grid = $("#matchesGrid");
+
+ if (!filtered.length) {
+  grid.innerHTML = `<div class="empty-state">${t("no_matches")}</div>`;
+  return;
+ }
+
+ grid.innerHTML = filtered.map(m => {
+  const group = statusGroup(m);
+  const live = group === "live";
+  const finished = group === "finished";
+
+  const score =
+   (m.homeScore ?? "-") + " : " + (m.awayScore ?? "-");
+
+  const status = live
+   ? `${t("live")} ${m.elapsed ?? ""}${m.elapsed ? "′" : ""}`
+   : finished
+    ? t("finished")
+    : (m.time || t("scheduled"));
+
   return `<article class="match-card">
-   <div class="match-meta"><span>${escapeHtml(m.league)}</span><span class="status ${live?"is-live":""}">${live?"● ":""}${escapeHtml(status)}</span></div>
-   <div class="teams"><span>${escapeHtml(m.home)}</span><strong class="score">${score}</strong><span>${escapeHtml(m.away)}</span></div>
-   <div class="match-foot">${live ? t("live") : finished ? t("finished") : t("scheduled")}</div>
+   <div class="match-meta">
+    <span>${escapeHtml(m.league)}</span>
+    <span class="status ${live ? "is-live" : ""}">
+     ${live ? "● " : ""}${escapeHtml(status)}
+    </span>
+   </div>
+   <div class="teams">
+    <span>${escapeHtml(m.home)}</span>
+    <strong class="score">${score}</strong>
+    <span>${escapeHtml(m.away)}</span>
+   </div>
+   <div class="match-foot">
+    ${live ? t("live") : finished ? t("finished") : t("scheduled")}
+   </div>
   </article>`;
  }).join("");
 }
-function escapeHtml(s){return String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+function escapeHtml(s) {
+ return String(s ?? "").replace(/[&<>"']/g, c => ({
+  "&":"&amp;",
+  "<":"&lt;",
+  ">":"&gt;",
+  '"':"&quot;",
+  "'":"&#39;"
+ }[c]));
+}
+
 async function loadMatches() {
- const base=window.KOORA_CONFIG?.apiBaseUrl;
- if(!base){window.kooraMatches=demoMatches;renderMatches(demoMatches);$("#dataNotice").textContent=t("demo");$("#matchesStatus").textContent=t("demo_badge");return;}
- $("#matchesStatus").textContent=t("loading");
- try{
-  const r=await fetch(base.replace(/\/$/,"")+"/api/matches?date="+new Date().toISOString().slice(0,10));
-  if(!r.ok) throw new Error("API "+r.status);
-  const data=await r.json(); window.kooraMatches=normalizeApi(data); renderMatches(window.kooraMatches);
-  $("#dataNotice").textContent=""; $("#matchesStatus").textContent=t("updated")+": "+new Date().toLocaleTimeString();
- }catch(e){$("#matchesStatus").textContent=t("api_error");renderMatches(demoMatches);}
+ const base = window.KOORA_CONFIG?.apiBaseUrl;
+
+ if (!base) {
+  window.kooraMatches = demoMatches;
+  renderMatches(demoMatches);
+  $("#dataNotice").textContent = t("demo");
+  $("#matchesStatus").textContent = t("demo_badge");
+  return;
+ }
+
+ $("#matchesStatus").textContent = t("loading");
+
+ try {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const url =
+   base.replace(/\/$/, "") +
+   "/api/matches?date=" + today;
+
+  const r = await fetch(url);
+
+  if (!r.ok) {
+   throw new Error("API " + r.status);
+  }
+
+  const data = await r.json();
+
+  window.kooraMatches = normalizeApi(data);
+
+  renderMatches(window.kooraMatches);
+
+  $("#dataNotice").textContent = "";
+
+  $("#matchesStatus").textContent =
+   t("updated") + ": " +
+   new Date().toLocaleTimeString();
+
+ } catch (e) {
+  console.error("Koora API error:", e);
+
+  $("#matchesStatus").textContent = t("api_error");
+
+  if (!window.kooraMatches) {
+   renderMatches(demoMatches);
+  }
+ }
 }
-function renderStreams(){
- const box=$("#streamsList"), streams=window.KOORA_CONFIG?.officialStreams || [];
- if(!streams.length){box.innerHTML=`<div class="empty-icon">▶</div><p>${t("streams_empty")}</p>`;return;}
- box.innerHTML=streams.map(s=>`<div class="stream-row"><b>${escapeHtml(s.title)}</b><a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${t("stream_link")}</a></div>`).join("");
+
+function renderStreams() {
+ const box = $("#streamsList");
+ const streams = window.KOORA_CONFIG?.officialStreams || [];
+
+ if (!streams.length) {
+  box.innerHTML =
+   `<div class="empty-icon">▶</div><p>${t("streams_empty")}</p>`;
+  return;
+ }
+
+ box.innerHTML = streams.map(s =>
+  `<div class="stream-row">
+   <b>${escapeHtml(s.title)}</b>
+   <a href="${escapeHtml(s.url)}"
+      target="_blank"
+      rel="noopener noreferrer">
+    ${t("stream_link")}
+   </a>
+  </div>`
+ ).join("");
 }
-document.querySelectorAll(".filter").forEach(btn=>btn.addEventListener("click",()=>{
- document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));btn.classList.add("active");
- activeFilter=btn.dataset.filter;renderMatches(window.kooraMatches||demoMatches);
-}));
-$("#langToggle").addEventListener("click",()=>setLanguage(lang==="ar"?"fr":"ar"));
-$("#refreshBtn").addEventListener("click",loadMatches);
-$("#year").textContent=new Date().getFullYear();
-setLanguage(lang);loadMatches();renderStreams();
-// Refresh scores once per minute. The Worker/API provider's quota and terms still apply.
-setInterval(loadMatches,60000);
+
+document.querySelectorAll(".filter").forEach(btn => {
+ btn.addEventListener("click", () => {
+  document.querySelectorAll(".filter").forEach(x =>
+   x.classList.remove("active")
+  );
+
+  btn.classList.add("active");
+  activeFilter = btn.dataset.filter;
+
+  renderMatches(window.kooraMatches || demoMatches);
+ });
+});
+
+$("#langToggle").addEventListener("click", () => {
+ setLanguage(lang === "ar" ? "fr" : "ar");
+});
+
+$("#refreshBtn").addEventListener("click", loadMatches);
+
+$("#year").textContent = new Date().getFullYear();
+
+setLanguage(lang);
+loadMatches();
+renderStreams();
+
+// التحديث كل 15 دقيقة لتقليل استهلاك طلبات API.
+setInterval(loadMatches, 15 * 60 * 1000);
