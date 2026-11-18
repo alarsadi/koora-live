@@ -7,40 +7,162 @@
   <meta name="theme-color" content="#080d18">
   <title>مشاهدة المباراة | Koora Live</title>
   <link rel="stylesheet" href="styles.css">
+
   <style>
-    body { background:#080d18; color:#fff; margin:0; }
-    .watch-page { max-width:1100px; margin:auto; padding:20px 15px; }
-    .watch-top { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; }
-    .watch-top a { color:#fff; text-decoration:none; }
-    .watch-actions { display:flex; gap:8px; }
-    .watch-actions button,.source-btn {
-      border:1px solid #344158; background:#172235; color:white;
-      padding:10px 15px; border-radius:9px; cursor:pointer;
+    body {
+      background:#080d18;
+      color:#fff;
+      margin:0;
     }
-    .match-heading { text-align:center; margin:25px 0; }
-    .match-heading h1 { font-size:23px; }
-    .video-box { background:#000; border:1px solid #26354d; border-radius:14px; overflow:hidden; }
-    #videoPlayer { width:100%; aspect-ratio:16/9; display:block; background:#000; }
-    .player-message { text-align:center; padding:25px 12px; color:#aab8cc; }
-    .sources { margin-top:22px; background:#111b2b; padding:18px; border-radius:12px; }
-    .sources h2 { font-size:19px; margin-top:0; }
-    #sourceList { display:flex; flex-wrap:wrap; gap:10px; }
-    .source-btn.active { background:#087f5b; border-color:#087f5b; }
-    .empty { color:#aab8cc; }
+
+    .watch-page {
+      max-width:1100px;
+      margin:auto;
+      padding:25px 15px;
+    }
+
+    .watch-top {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:35px;
+    }
+
+    .watch-top a {
+      color:#fff;
+      text-decoration:none;
+    }
+
+    .watch-actions {
+      display:flex;
+      gap:10px;
+    }
+
+    .watch-actions button,
+    .source-btn {
+      border:1px solid #344158;
+      background:#172235;
+      color:white;
+      padding:12px 18px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:16px;
+    }
+
+    .match-heading {
+      text-align:center;
+      margin:30px 0 45px;
+    }
+
+    .match-heading h1 {
+      font-size:25px;
+      margin-bottom:20px;
+    }
+
+    .match-heading p {
+      color:#b8c3d5;
+      font-size:18px;
+    }
+
+    .video-box {
+      background:#000;
+      border:1px solid #26354d;
+      border-radius:18px;
+      overflow:hidden;
+      position:relative;
+    }
+
+    #videoPlayer {
+      width:100%;
+      aspect-ratio:16/9;
+      display:block;
+      background:#000;
+      object-fit:contain;
+    }
+
+    .player-message {
+      display:none;
+      padding:18px 15px;
+      color:#cbd5e1;
+      text-align:center;
+      background:#050505;
+      font-size:16px;
+    }
+
+    .sources {
+      margin-top:25px;
+      background:#111b2b;
+      padding:22px;
+      border-radius:18px;
+    }
+
+    .sources h2 {
+      font-size:23px;
+      margin-top:0;
+      margin-bottom:30px;
+    }
+
+    #sourceList {
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+    }
+
+    .source-btn {
+      background:#087f5b;
+      border-color:#087f5b;
+      min-width:150px;
+    }
+
+    .source-btn.active {
+      background:#075c45;
+      border-color:#16a879;
+    }
+
+    .empty {
+      color:#aab8cc;
+    }
+
     @media(max-width:600px) {
-      .watch-top { align-items:flex-start; flex-direction:column; }
-      .watch-actions { width:100%; }
-      .watch-actions button { flex:1; }
+      .watch-page {
+        padding:22px 15px;
+      }
+
+      .watch-top {
+        flex-direction:column;
+        align-items:stretch;
+      }
+
+      .watch-actions {
+        width:100%;
+      }
+
+      .watch-actions button {
+        flex:1;
+      }
+
+      .match-heading h1 {
+        font-size:22px;
+      }
+
+      .sources h2 {
+        font-size:21px;
+      }
     }
   </style>
 </head>
+
 <body>
+
   <main class="watch-page">
+
     <header class="watch-top">
       <a href="index.html">← العودة إلى المباريات</a>
+
       <div class="watch-actions">
         <button onclick="location.reload()">⟳ تحديث</button>
-        <button onclick="shareMatch()">مشاركة ↗</button>
+        <button onclick="shareMatch()">↗ مشاركة</button>
       </div>
     </header>
 
@@ -50,109 +172,206 @@
     </section>
 
     <section class="video-box">
-      <video id="videoPlayer" controls playsinline></video>
-      <div class="player-message" id="playerMessage">
-        اختر مصدر البث لبدء المشاهدة
-      </div>
+      <video
+        id="videoPlayer"
+        controls
+        playsinline
+        preload="metadata">
+      </video>
+
+      <div class="player-message" id="playerMessage"></div>
     </section>
 
     <section class="sources">
       <h2>مصادر المشاهدة</h2>
+
       <div id="sourceList">
         <p class="empty">جاري تحميل مصادر البث...</p>
       </div>
     </section>
+
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script src="config.js"></script>
+
   <script>
     const API = (window.KOORA_CONFIG?.apiBaseUrl || "").replace(/\/$/, "");
+
     const params = new URLSearchParams(location.search);
     const streamId = params.get("id");
+
     const player = document.getElementById("videoPlayer");
     const message = document.getElementById("playerMessage");
     const sourceList = document.getElementById("sourceList");
+
     let hlsInstance = null;
+
+    function showMessage(text) {
+      message.textContent = text;
+      message.style.display = "block";
+    }
+
+    function hideMessage() {
+      message.textContent = "";
+      message.style.display = "none";
+    }
+
+    // إخفاء الرسالة عند بدء الفيديو
+    player.addEventListener("playing", hideMessage);
+    player.addEventListener("error", () => {
+      showMessage("تعذر تشغيل هذا المصدر. تحقق من الرابط.");
+    });
 
     async function loadSources() {
       if (!streamId || !API) {
-        sourceList.innerHTML = '<p class="empty">رابط المباراة غير صالح.</p>';
+        sourceList.innerHTML =
+          '<p class="empty">رابط المباراة غير صالح.</p>';
         return;
       }
 
       try {
         const response = await fetch(`${API}/api/streams`);
-        if (!response.ok) throw new Error("تعذر تحميل المصادر");
 
-        const data = await response.json();
-        const streams = Array.isArray(data) ? data : (data.streams || []);
-        const selected = streams.filter(item => String(item.id) === String(streamId));
+        if (!response.ok) {
+          throw new Error("تعذر تحميل المصادر");
+        }
+
+        const result = await response.json();
+
+        const streams = Array.isArray(result)
+          ? result
+          : (result.streams || []);
+
+        const selected = streams.filter(
+          item => String(item.id) === String(streamId)
+        );
 
         if (!selected.length) {
-          sourceList.innerHTML = '<p class="empty">لا توجد مصادر متاحة لهذه المباراة.</p>';
+          sourceList.innerHTML =
+            '<p class="empty">لا توجد مصادر متاحة لهذه المباراة.</p>';
           return;
         }
 
         const match = selected[0];
+
         document.getElementById("matchTitle").textContent =
           `${match.home_team || ""} × ${match.away_team || ""}`;
+
         document.getElementById("matchInfo").textContent =
           match.competition || "Koora Live";
 
         sourceList.innerHTML = "";
+
         selected.forEach((item, index) => {
           const button = document.createElement("button");
+
           button.className = "source-btn";
           button.textContent = item.channel || `المصدر ${index + 1}`;
-          button.addEventListener("click", () => playSource(item.id, button));
+
+          button.addEventListener("click", () => {
+            playSource(item.id, button);
+          });
+
           sourceList.appendChild(button);
         });
+
       } catch (error) {
-        sourceList.innerHTML = '<p class="empty">تعذر الاتصال بالخادم. حاول التحديث.</p>';
+        console.error(error);
+
+        sourceList.innerHTML =
+          '<p class="empty">تعذر الاتصال بالخادم. حاول التحديث.</p>';
       }
     }
 
     async function playSource(id, button) {
       try {
-        message.textContent = "جاري تشغيل البث...";
+        showMessage("جاري تحميل البث...");
+
         if (hlsInstance) {
           hlsInstance.destroy();
           hlsInstance = null;
         }
+
         player.pause();
         player.removeAttribute("src");
         player.load();
 
-        const response = await fetch(`${API}/api/streams/${encodeURIComponent(id)}`);
-        if (!response.ok) throw new Error("تعذر جلب رابط البث");
+        const response = await fetch(
+          `${API}/api/streams/${encodeURIComponent(id)}`
+        );
+
+        if (!response.ok) {
+          throw new Error("تعذر جلب رابط البث");
+        }
 
         const data = await response.json();
         const url = data.stream_url || data.url;
 
-        if (!url) throw new Error("رابط البث غير متوفر");
+        if (!url) {
+          throw new Error("رابط البث غير متوفر");
+        }
 
-        document.querySelectorAll(".source-btn").forEach(b => b.classList.remove("active"));
+        const parsed = new URL(url);
+
+        if (!["http:", "https:"].includes(parsed.protocol)) {
+          throw new Error("رابط الفيديو غير صالح");
+        }
+
+        document.querySelectorAll(".source-btn").forEach(btn => {
+          btn.classList.remove("active");
+        });
+
         button.classList.add("active");
-        message.textContent = "إذا لم يبدأ التشغيل، فقد يكون المصدر غير متوافق.";
 
-        if (url.includes(".m3u8") && Hls.isSupported()) {
+        const isHls = /\.m3u8($|\?)/i.test(
+          parsed.pathname + parsed.search
+        );
+
+        if (isHls && player.canPlayType("application/vnd.apple.mpegurl")) {
+          player.src = url;
+          player.play().catch(() => {
+            showMessage("اضغط زر التشغيل لبدء المشاهدة.");
+          });
+
+        } else if (isHls && window.Hls && Hls.isSupported()) {
           hlsInstance = new Hls();
+
           hlsInstance.loadSource(url);
           hlsInstance.attachMedia(player);
-          hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => player.play().catch(() => {}));
+
+          hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            player.play().catch(() => {
+              showMessage("اضغط زر التشغيل لبدء المشاهدة.");
+            });
+          });
+
+          hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              showMessage("حدث خطأ أثناء تحميل البث.");
+            }
+          });
+
         } else {
           player.src = url;
-          player.play().catch(() => {});
+
+          player.play().catch(() => {
+            showMessage("اضغط زر التشغيل لبدء المشاهدة.");
+          });
         }
+
       } catch (error) {
-        message.textContent = error.message || "تعذر تشغيل هذا المصدر.";
+        console.error("Player error:", error);
+        showMessage(error.message || "تعذر تشغيل هذا المصدر.");
       }
     }
 
     function shareMatch() {
       if (navigator.share) {
-        navigator.share({ title: document.title, url: location.href }).catch(() => {});
+        navigator.share({
+          title: document.title,
+          url: location.href
+        }).catch(() => {});
       } else if (navigator.clipboard) {
         navigator.clipboard.writeText(location.href)
           .then(() => alert("تم نسخ رابط المباراة"));
@@ -163,5 +382,6 @@
 
     loadSources();
   </script>
+
 </body>
 </html>
