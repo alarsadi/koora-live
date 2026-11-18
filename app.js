@@ -51,6 +51,9 @@ const translations = {
 let lang = localStorage.getItem("koora-lang") || "ar";
 let activeFilter = "all";
 
+// البثوث القادمة من قاعدة البيانات
+let availableStreams = [];
+
 const $ = s => document.querySelector(s);
 const t = key => translations[lang]?.[key] || key;
 
@@ -129,6 +132,35 @@ function statusGroup(m) {
  }
 
  return "scheduled";
+}
+
+// توحيد أسماء الفرق لتسهيل المطابقة
+function normalizeTeamName(name) {
+ return String(name || "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/[^a-z0-9\u0600-\u06FF]/g, "");
+}
+
+// البحث عن بث مطابق للمباراة
+function findMatchStream(match) {
+ const home = normalizeTeamName(match.home);
+ const away = normalizeTeamName(match.away);
+
+ if (!home || !away) return null;
+
+ return availableStreams.find(s => {
+  const streamHome = normalizeTeamName(s.home_team);
+  const streamAway = normalizeTeamName(s.away_team);
+
+  if (!streamHome || !streamAway) return false;
+
+  return (
+   (home === streamHome && away === streamAway) ||
+   (home === streamAway && away === streamHome)
+  );
+ }) || null;
 }
 
 function setLanguage(next) {
@@ -254,6 +286,7 @@ function renderLogo(url,className,name) {
  >`;
 }
 
+// عرض المباريات وربط البطاقة بمشغل الفيديو
 function renderMatches(matches) {
  const grid = $("#matchesGrid");
  if (!grid) return;
@@ -274,6 +307,9 @@ function renderMatches(matches) {
   const live = group === "live";
   const finished = group === "finished";
 
+  // هل توجد مباراة بث مطابقة؟
+  const linkedStream = findMatchStream(m);
+
   const score = (m.homeScore ?? "-") + " : " + (m.awayScore ?? "-");
 
   const status = live
@@ -283,12 +319,16 @@ function renderMatches(matches) {
     : (m.time || t("scheduled"));
 
   return `
-   <article class="match-card">
+   <article
+    class="match-card ${linkedStream ? "has-stream" : ""}"
+    ${linkedStream ? `data-stream-id="${Number(linkedStream.id)}" role="button" tabindex="0" aria-label="${escapeHtml(t("stream_link"))}"` : ""}
+   >
     <div class="match-meta">
      <span class="match-league">
       ${renderLogo(m.leagueLogo,"league-logo",m.league)}
       ${escapeHtml(m.league)}
      </span>
+
      <span class="status ${live ? "is-live" : ""}">
       ${live ? "● " : ""}${escapeHtml(status)}
      </span>
@@ -310,13 +350,34 @@ function renderMatches(matches) {
 
     <div class="match-foot">
      <span>${live ? t("live") : finished ? t("finished") : t("scheduled")}</span>
+
      <span class="${!live && !finished ? "match-time" : ""}">
       ${!live && !finished ? escapeHtml(m.time || "") : ""}
      </span>
     </div>
+
+    ${linkedStream ? `
+     <div class="match-watch-hint">
+      ▶ ${t("stream_link")}
+     </div>
+    ` : ""}
    </article>
   `;
  }).join("");
+
+ // الضغط على بطاقة المباراة يفتح نافذة البث
+ grid.querySelectorAll(".match-card.has-stream").forEach(card => {
+  const open = () => openStream(card.dataset.streamId);
+
+  card.addEventListener("click", open);
+
+  card.addEventListener("keydown", e => {
+   if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    open();
+   }
+  });
+ });
 }
 
 // تحميل المباريات من API-Football
@@ -412,6 +473,7 @@ function createPlayer() {
  return modal;
 }
 
+// فتح البث داخل نافذة منبثقة
 async function openStream(id) {
  const base = API();
  if (!base) return;
@@ -490,6 +552,7 @@ async function openStream(id) {
  }
 }
 
+// إغلاق المشغل
 function closeStream() {
  const modal = $("#streamPlayerModal");
  const video = $("#streamVideo");
@@ -513,14 +576,14 @@ async function renderStreams() {
  const box = $("#streamsList");
  const base = API();
 
- if (!box) return;
-
  if (!base) {
-  box.innerHTML = `<p>${t("streams_empty")}</p>`;
+  availableStreams = [];
+  if (box) box.innerHTML = `<p>${t("streams_empty")}</p>`;
+  if (window.kooraMatches) renderMatches(window.kooraMatches);
   return;
  }
 
- box.innerHTML = `<p>${t("loading")}</p>`;
+ if (box) box.innerHTML = `<p>${t("loading")}</p>`;
 
  try {
   const response = await fetch(
@@ -532,13 +595,22 @@ async function renderStreams() {
 
   const streams = await response.json();
 
-  if (!Array.isArray(streams) || !streams.length) {
+  availableStreams = Array.isArray(streams) ? streams : [];
+
+  // إعادة رسم المباريات بعد تحميل روابط البث
+  if (window.kooraMatches) {
+   renderMatches(window.kooraMatches);
+  }
+
+  if (!box) return;
+
+  if (!availableStreams.length) {
    box.innerHTML =
     `<div class="empty-icon">▶</div><p>${t("streams_empty")}</p>`;
    return;
   }
 
-  box.innerHTML = streams.map(s => {
+  box.innerHTML = availableStreams.map(s => {
    const statusText =
     s.status === "live" ? t("live") :
     s.status === "finished" ? t("stream_finished") :
@@ -590,7 +662,8 @@ async function renderStreams() {
 
  } catch (error) {
   console.error("Streams error:",error);
-  box.innerHTML = `<p>${t("api_error")}</p>`;
+
+  if (box) box.innerHTML = `<p>${t("api_error")}</p>`;
  }
 }
 
