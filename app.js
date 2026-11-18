@@ -6,7 +6,7 @@ const translations = {
   hero_cta:"استكشف المباريات",live_label:"مركز المباريات",matches_title:"المباريات والنتائج",refresh:"تحديث",
   filter_all:"الكل",filter_live:"مباشر",filter_scheduled:"قادمة",filter_finished:"انتهت",
   streams_label:"مشاهدة قانونية",streams_title:"البث المباشر",
-  streams_desc:"اختر المباراة لفتح مشغل الفيديو.",
+  streams_desc:"اختر المباراة لفتح صفحة المشاهدة.",
   streams_empty:"لا توجد مباريات بث مضافة حالياً.",
   news_label:"من الملعب",news_title:"آخر الأخبار والتحليلات",
   guide_tag:"دليل",analysis_tag:"تحليل",news_one_title:"كيف تقرأ إحصائيات المباراة؟",
@@ -18,9 +18,6 @@ const translations = {
   no_matches:"لا توجد مباريات لعرضها.",loading:"جارٍ التحميل…",api_error:"تعذر جلب البيانات. تحقق من إعداد واجهة البيانات.",
   live:"مباشر",scheduled:"لم تبدأ",finished:"انتهت",minute:"دقيقة",demo_badge:"مثال تجريبي",
   stream_link:"مشاهدة المباراة",updated:"آخر تحديث",
-  player_loading:"جارٍ تحميل البث...",
-  player_error:"تعذر تشغيل البث. تحقق من الرابط وتوافقه مع مشغل الفيديو.",
-  player_click:"اضغط زر التشغيل لبدء المشاهدة.",
   stream_upcoming:"قريباً",stream_finished:"انتهت",close:"إغلاق"
  },
  fr: {
@@ -29,7 +26,7 @@ const translations = {
   hero_cta:"Voir les matchs",live_label:"Centre des matchs",matches_title:"Matchs et résultats",refresh:"Actualiser",
   filter_all:"Tous",filter_live:"En direct",filter_scheduled:"À venir",filter_finished:"Terminés",
   streams_label:"Visionnage légal",streams_title:"Diffusion en direct",
-  streams_desc:"Choisissez un match pour ouvrir le lecteur vidéo.",
+  streams_desc:"Choisissez un match pour ouvrir la page de visionnage.",
   streams_empty:"Aucun match disponible pour le moment.",
   news_label:"Sur le terrain",news_title:"Actualités et analyses",
   guide_tag:"Guide",analysis_tag:"Analyse",news_one_title:"Comment lire les statistiques d’un match ?",
@@ -41,9 +38,6 @@ const translations = {
   no_matches:"Aucun match à afficher.",loading:"Chargement…",api_error:"Impossible de charger les données. Vérifiez la configuration API.",
   live:"En direct",scheduled:"À venir",finished:"Terminé",minute:"min",demo_badge:"Démo",
   stream_link:"Regarder le match",updated:"Mis à jour",
-  player_loading:"Chargement du direct...",
-  player_error:"Impossible de lire ce flux. Vérifiez le lien et sa compatibilité.",
-  player_click:"Appuyez sur lecture pour commencer.",
   stream_upcoming:"À venir",stream_finished:"Terminé",close:"Fermer"
  }
 };
@@ -161,6 +155,14 @@ function findMatchStream(match) {
    (home === streamAway && away === streamHome)
   );
  }) || null;
+}
+
+// الانتقال إلى صفحة مشاهدة المباراة
+function openStream(id) {
+ if (!id) return;
+
+ const watchUrl = `watch.html?id=${encodeURIComponent(id)}`;
+ window.location.href = watchUrl;
 }
 
 function setLanguage(next) {
@@ -286,7 +288,7 @@ function renderLogo(url,className,name) {
  >`;
 }
 
-// عرض المباريات وربط البطاقة بمشغل الفيديو
+// عرض المباريات وربطها بصفحة المشاهدة
 function renderMatches(matches) {
  const grid = $("#matchesGrid");
  if (!grid) return;
@@ -307,7 +309,7 @@ function renderMatches(matches) {
   const live = group === "live";
   const finished = group === "finished";
 
-  // هل توجد مباراة بث مطابقة؟
+  // البحث عن البث المرتبط بالمباراة
   const linkedStream = findMatchStream(m);
 
   const score = (m.homeScore ?? "-") + " : " + (m.awayScore ?? "-");
@@ -321,7 +323,7 @@ function renderMatches(matches) {
   return `
    <article
     class="match-card ${linkedStream ? "has-stream" : ""}"
-    ${linkedStream ? `data-stream-id="${Number(linkedStream.id)}" role="button" tabindex="0" aria-label="${escapeHtml(t("stream_link"))}"` : ""}
+    ${linkedStream ? `data-stream-id="${escapeHtml(linkedStream.id)}" role="link" tabindex="0" aria-label="${escapeHtml(t("stream_link"))}"` : ""}
    >
     <div class="match-meta">
      <span class="match-league">
@@ -365,7 +367,7 @@ function renderMatches(matches) {
   `;
  }).join("");
 
- // الضغط على بطاقة المباراة يفتح نافذة البث
+ // الضغط أو لوحة المفاتيح يفتحان صفحة المشاهدة
  grid.querySelectorAll(".match-card.has-stream").forEach(card => {
   const open = () => openStream(card.dataset.streamId);
 
@@ -440,137 +442,6 @@ async function loadMatches() {
  }
 }
 
-// إنشاء مشغل الفيديو
-function createPlayer() {
- let modal = $("#streamPlayerModal");
- if (modal) return modal;
-
- modal = document.createElement("div");
- modal.id = "streamPlayerModal";
-
- modal.innerHTML = `
-  <div class="player-overlay">
-   <div class="player-window">
-    <button class="player-close" type="button">✕ ${t("close")}</button>
-    <div class="player-screen">
-     <video id="streamVideo" controls playsinline preload="none"></video>
-     <p id="playerMessage"></p>
-    </div>
-   </div>
-  </div>
- `;
-
- document.body.appendChild(modal);
-
- modal.querySelector(".player-close").addEventListener("click",closeStream);
-
- modal.querySelector(".player-overlay").addEventListener("click",e => {
-  if (e.target.classList.contains("player-overlay")) {
-   closeStream();
-  }
- });
-
- return modal;
-}
-
-// فتح البث داخل نافذة منبثقة
-async function openStream(id) {
- const base = API();
- if (!base) return;
-
- const modal = createPlayer();
- const video = $("#streamVideo");
- const message = $("#playerMessage");
-
- modal.style.display = "block";
- message.textContent = t("player_loading");
-
- if (window.currentHls) {
-  window.currentHls.destroy();
-  window.currentHls = null;
- }
-
- video.pause();
- video.removeAttribute("src");
- video.load();
-
- try {
-  const response = await fetch(
-   `${base}/api/streams/${encodeURIComponent(id)}`,
-   {cache:"no-store"}
-  );
-
-  if (!response.ok) throw new Error("Stream unavailable");
-
-  const data = await response.json();
-  const streamUrl = data.stream_url;
-
-  if (!streamUrl) throw new Error("No stream URL");
-
-  const parsed = new URL(streamUrl);
-
-  if (!["http:","https:"].includes(parsed.protocol)) {
-   throw new Error("Invalid video URL");
-  }
-
-  const isHls = /\.m3u8($|\?)/i.test(parsed.pathname + parsed.search);
-
-  if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
-   video.src = streamUrl;
-  } else if (isHls) {
-   if (!window.Hls) {
-    await new Promise((resolve,reject) => {
-     const script = document.createElement("script");
-     script.src = "https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js";
-     script.onload = resolve;
-     script.onerror = reject;
-     document.head.appendChild(script);
-    });
-   }
-
-   if (!window.Hls.isSupported()) {
-    throw new Error("HLS not supported");
-   }
-
-   window.currentHls = new window.Hls();
-   window.currentHls.loadSource(streamUrl);
-   window.currentHls.attachMedia(video);
-
-  } else {
-   video.src = streamUrl;
-  }
-
-  message.textContent = "";
-
-  video.play().catch(() => {
-   message.textContent = t("player_click");
-  });
-
- } catch (error) {
-  console.error("Stream player error:",error);
-  message.textContent = t("player_error");
- }
-}
-
-// إغلاق المشغل
-function closeStream() {
- const modal = $("#streamPlayerModal");
- const video = $("#streamVideo");
-
- if (video) {
-  video.pause();
-  video.removeAttribute("src");
-  video.load();
- }
-
- if (window.currentHls) {
-  window.currentHls.destroy();
-  window.currentHls = null;
- }
-
- if (modal) modal.style.display = "none";
-}
-
 // جلب بطاقات البث من قاعدة البيانات
 async function renderStreams() {
  const box = $("#streamsList");
@@ -578,12 +449,21 @@ async function renderStreams() {
 
  if (!base) {
   availableStreams = [];
-  if (box) box.innerHTML = `<p>${t("streams_empty")}</p>`;
-  if (window.kooraMatches) renderMatches(window.kooraMatches);
+
+  if (box) {
+   box.innerHTML = `<p>${t("streams_empty")}</p>`;
+  }
+
+  if (window.kooraMatches) {
+   renderMatches(window.kooraMatches);
+  }
+
   return;
  }
 
- if (box) box.innerHTML = `<p>${t("loading")}</p>`;
+ if (box) {
+  box.innerHTML = `<p>${t("loading")}</p>`;
+ }
 
  try {
   const response = await fetch(
@@ -593,9 +473,14 @@ async function renderStreams() {
 
   if (!response.ok) throw new Error("Streams error");
 
-  const streams = await response.json();
+  const result = await response.json();
 
-  availableStreams = Array.isArray(streams) ? streams : [];
+  // دعم استجابة المصفوفة أو كائن يحتوي على streams
+  availableStreams = Array.isArray(result)
+   ? result
+   : Array.isArray(result.streams)
+    ? result.streams
+    : [];
 
   // إعادة رسم المباريات بعد تحميل روابط البث
   if (window.kooraMatches) {
@@ -618,8 +503,8 @@ async function renderStreams() {
 
    return `
     <article class="stream-card"
-     data-stream-id="${Number(s.id)}"
-     role="button"
+     data-stream-id="${escapeHtml(s.id)}"
+     role="link"
      tabindex="0">
 
      <div class="stream-card-top">
@@ -663,7 +548,9 @@ async function renderStreams() {
  } catch (error) {
   console.error("Streams error:",error);
 
-  if (box) box.innerHTML = `<p>${t("api_error")}</p>`;
+  if (box) {
+   box.innerHTML = `<p>${t("api_error")}</p>`;
+  }
  }
 }
 
