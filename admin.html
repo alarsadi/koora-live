@@ -1,0 +1,253 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>إدارة البث - Koora Live</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#07130f;color:#fff;font-family:Arial,sans-serif;padding:20px}
+.container{max-width:850px;margin:30px auto}
+h1{color:#42d392}
+.card{background:#11251c;border:1px solid #244534;border-radius:14px;padding:20px;margin-bottom:20px}
+input,select{width:100%;padding:13px;margin:7px 0 14px;background:#07130f;color:white;border:1px solid #355c46;border-radius:8px}
+label{display:block;color:#c4d8cb}
+button{padding:12px 18px;border:0;border-radius:8px;background:#22a66b;color:white;font-weight:bold;cursor:pointer;margin:4px}
+button.delete{background:#b73535}
+button.edit{background:#a16b20}
+.hidden{display:none}
+.match{background:#183426;padding:15px;border-radius:10px;margin:12px 0}
+small{color:#b8cabc}
+#message{margin:12px 0;color:#f5c76a}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Koora Live | لوحة الإدارة</h1>
+
+<section class="card" id="loginBox">
+<h2>تسجيل دخول المدير</h2>
+<label>اسم المستخدم</label>
+<input id="username" autocomplete="username">
+<label>كلمة المرور</label>
+<input id="password" type="password" autocomplete="current-password">
+<button onclick="login()">دخول</button>
+<div id="loginMessage"></div>
+</section>
+
+<section id="panel" class="hidden">
+<div class="card">
+<h2 id="formTitle">إضافة مباراة جديدة</h2>
+<form id="streamForm">
+<input type="hidden" id="streamId">
+
+<label>البطولة</label>
+<input id="competition" required placeholder="مثلاً: دوري أبطال أوروبا">
+
+<label>الفريق الأول</label>
+<input id="home_team" required>
+
+<label>الفريق الثاني</label>
+<input id="away_team" required>
+
+<label>القناة</label>
+<input id="channel" required placeholder="مثلاً: beIN SPORTS 1">
+
+<label>توقيت المباراة</label>
+<input id="match_time" placeholder="مثلاً: 20:00">
+
+<label>رابط البث المرخص</label>
+<input id="stream_url" type="url" required placeholder="https://...">
+
+<label>حالة المباراة</label>
+<select id="status">
+<option value="live">مباشر</option>
+<option value="upcoming">قريباً</option>
+<option value="finished">انتهت</option>
+</select>
+
+<button type="submit">حفظ المباراة</button>
+<button type="button" onclick="resetForm()">إلغاء</button>
+</form>
+<div id="message"></div>
+</div>
+
+<div class="card">
+<h2>المباريات المضافة</h2>
+<div id="matches">جارٍ التحميل...</div>
+<button onclick="logout()">تسجيل الخروج</button>
+</div>
+</section>
+</div>
+
+<script>
+const API = "https://gentle-scene-e807koora-live-api.alaamkaiss.workers.dev";
+let token = sessionStorage.getItem("koora_admin_token");
+
+function headers(){
+  return {
+    "Content-Type":"application/json",
+    "Authorization":"Bearer "+token
+  };
+}
+
+async function login(){
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  const message = document.getElementById("loginMessage");
+
+  try{
+    const response = await fetch(API+"/api/admin/login",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({username,password})
+    });
+    const data = await response.json();
+
+    if(!response.ok) throw new Error(data.error || "فشل تسجيل الدخول");
+
+    token = data.token;
+    sessionStorage.setItem("koora_admin_token",token);
+    showPanel();
+  }catch(error){
+    message.textContent = error.message;
+  }
+}
+
+function showPanel(){
+  document.getElementById("loginBox").classList.add("hidden");
+  document.getElementById("panel").classList.remove("hidden");
+  loadStreams();
+}
+
+function logout(){
+  sessionStorage.removeItem("koora_admin_token");
+  token = null;
+  location.reload();
+}
+
+async function loadStreams(){
+  const box = document.getElementById("matches");
+  box.textContent = "جارٍ التحميل...";
+
+  try{
+    const response = await fetch(API+"/api/admin/streams",{
+      headers:headers()
+    });
+
+    if(response.status === 401){
+      logout();
+      return;
+    }
+
+    const streams = await response.json();
+    box.innerHTML = "";
+
+    if(!streams.length){
+      box.textContent = "لا توجد مباريات مضافة بعد.";
+      return;
+    }
+
+    streams.forEach(item=>{
+      const div = document.createElement("div");
+      div.className = "match";
+
+      const title = document.createElement("strong");
+      title.textContent = item.home_team+" ضد "+item.away_team;
+
+      const info = document.createElement("p");
+      info.textContent = item.competition+" | "+item.channel+" | "+item.status;
+
+      const edit = document.createElement("button");
+      edit.className = "edit";
+      edit.textContent = "تعديل";
+      edit.onclick = ()=>editStream(item);
+
+      const del = document.createElement("button");
+      del.className = "delete";
+      del.textContent = "حذف";
+      del.onclick = ()=>deleteStream(item.id);
+
+      div.append(title,info,edit,del);
+      box.appendChild(div);
+    });
+  }catch(error){
+    box.textContent = "تعذر تحميل المباريات.";
+  }
+}
+
+document.getElementById("streamForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+
+  const id = document.getElementById("streamId").value;
+  const body = {
+    competition:document.getElementById("competition").value.trim(),
+    home_team:document.getElementById("home_team").value.trim(),
+    away_team:document.getElementById("away_team").value.trim(),
+    channel:document.getElementById("channel").value.trim(),
+    match_time:document.getElementById("match_time").value.trim(),
+    stream_url:document.getElementById("stream_url").value.trim(),
+    status:document.getElementById("status").value
+  };
+
+  try{
+    const response = await fetch(
+      API+"/api/admin/streams"+(id?"/"+id:""),
+      {
+        method:id?"PUT":"POST",
+        headers:headers(),
+        body:JSON.stringify(body)
+      }
+    );
+
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "تعذر الحفظ");
+
+    document.getElementById("message").textContent = "تم حفظ المباراة بنجاح.";
+    resetForm();
+    loadStreams();
+  }catch(error){
+    document.getElementById("message").textContent = error.message;
+  }
+});
+
+function editStream(item){
+  document.getElementById("streamId").value = item.id;
+  document.getElementById("competition").value = item.competition;
+  document.getElementById("home_team").value = item.home_team;
+  document.getElementById("away_team").value = item.away_team;
+  document.getElementById("channel").value = item.channel;
+  document.getElementById("match_time").value = item.match_time || "";
+  document.getElementById("stream_url").value = item.stream_url;
+  document.getElementById("status").value = item.status;
+  document.getElementById("formTitle").textContent = "تعديل المباراة";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+async function deleteStream(id){
+  if(!confirm("هل تريد حذف هذه المباراة؟")) return;
+
+  try{
+    const response = await fetch(API+"/api/admin/streams/"+id,{
+      method:"DELETE",
+      headers:headers()
+    });
+
+    if(!response.ok) throw new Error("تعذر الحذف");
+    loadStreams();
+  }catch(error){
+    alert(error.message);
+  }
+}
+
+function resetForm(){
+  document.getElementById("streamForm").reset();
+  document.getElementById("streamId").value = "";
+  document.getElementById("formTitle").textContent = "إضافة مباراة جديدة";
+}
+
+if(token) showPanel();
+</script>
+</body>
+</html>
