@@ -44,11 +44,30 @@ let activeFilter = "all";
 const $ = s => document.querySelector(s);
 const t = key => translations[lang][key] || key;
 
-const demoMatches = [
- {league:"Champions League",home:"Real Madrid",away:"Manchester City",homeScore:1,awayScore:1,status:"LIVE",elapsed:62},
- {league:"Premier League",home:"Arsenal",away:"Liverpool",homeScore:null,awayScore:null,status:"NS",time:"20:00"},
- {league:"La Liga",home:"Barcelona",away:"Atlético Madrid",homeScore:2,awayScore:0,status:"FT"}
-];
+// توقيت وتاريخ جهاز الزائر تلقائياً
+function getLocalTime(date) {
+ return new Intl.DateTimeFormat(
+  lang === "ar" ? "ar" : "fr-FR",
+  {
+   hour: "2-digit",
+   minute: "2-digit",
+   hour12: false
+  }
+ ).format(date);
+}
+
+function getLocalDate() {
+ const parts = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+ }).formatToParts(new Date());
+
+ const values = {};
+ parts.forEach(p => values[p.type] = p.value);
+
+ return `${values.year}-${values.month}-${values.day}`;
+}
 
 function setLanguage(next) {
  lang = next;
@@ -72,6 +91,7 @@ function setLanguage(next) {
 
  document.querySelectorAll(".footer-links a, .news-body a").forEach(a => {
   const base = a.getAttribute("href");
+
   if (base && frPages[base]) {
    a.setAttribute("href", lang === "fr" ? frPages[base] : base);
   }
@@ -83,10 +103,39 @@ function setLanguage(next) {
  renderStreams();
 }
 
-function statusGroup(m) {
- const s = m.fixture?.status?.short || m.status;
+const demoMatches = [
+ {
+  league:"Champions League",
+  home:"Real Madrid",
+  away:"Manchester City",
+  homeScore:1,
+  awayScore:1,
+  status:"LIVE",
+  elapsed:62
+ },
+ {
+  league:"Premier League",
+  home:"Arsenal",
+  away:"Liverpool",
+  homeScore:null,
+  awayScore:null,
+  status:"NS",
+  time:"20:00"
+ },
+ {
+  league:"La Liga",
+  home:"Barcelona",
+  away:"Atlético Madrid",
+  homeScore:2,
+  awayScore:0,
+  status:"FT"
+ }
+];
 
- if (["1H","2H","HT","ET","BT","P","LIVE"].includes(s)) {
+function statusGroup(m) {
+ const s = m.status;
+
+ if (["1H","2H","HT","ET","BT","P","LIVE","SUSP","INT"].includes(s)) {
   return "live";
  }
 
@@ -103,26 +152,44 @@ function normalizeApi(data) {
  return (data.response || [])
   .filter(x => {
    const id = x.fixture?.id;
+
    if (id && seen.has(id)) return false;
    if (id) seen.add(id);
+
    return true;
   })
-  .map(x => ({
-   id: x.fixture?.id || null,
-   league: x.league?.name || "Football",
-   home: x.teams?.home?.name || "Home",
-   away: x.teams?.away?.name || "Away",
-   homeScore: x.goals?.home,
-   awayScore: x.goals?.away,
-   status: x.fixture?.status?.short || "NS",
-   elapsed: x.fixture?.status?.elapsed,
-   time: x.fixture?.date
-    ? new Date(x.fixture.date).toLocaleTimeString(
-       lang === "ar" ? "ar" : "fr-FR",
-       {hour:"2-digit",minute:"2-digit"}
-      )
-    : ""
-  }));
+  .map(x => {
+   const fixtureDate = x.fixture?.date
+    ? new Date(x.fixture.date)
+    : null;
+
+   return {
+    id: x.fixture?.id || null,
+
+    league: x.league?.name || "Football",
+    leagueLogo: x.league?.logo || "",
+
+    home: x.teams?.home?.name || "Home",
+    homeLogo: x.teams?.home?.logo || "",
+
+    away: x.teams?.away?.name || "Away",
+    awayLogo: x.teams?.away?.logo || "",
+
+    homeScore: x.goals?.home,
+    awayScore: x.goals?.away,
+
+    status: x.fixture?.status?.short || "NS",
+    elapsed: x.fixture?.status?.elapsed,
+
+    timestamp: fixtureDate && !isNaN(fixtureDate)
+     ? fixtureDate.getTime()
+     : 0,
+
+    time: fixtureDate && !isNaN(fixtureDate)
+     ? getLocalTime(fixtureDate)
+     : ""
+   };
+  });
 }
 
 function sortMatches(matches) {
@@ -136,14 +203,33 @@ function sortMatches(matches) {
   const groupA = order[statusGroup(a)];
   const groupB = order[statusGroup(b)];
 
-  if (groupA !== groupB) return groupA - groupB;
+  if (groupA !== groupB) {
+   return groupA - groupB;
+  }
 
-  if (statusGroup(a) === "scheduled") {
-   return (a.time || "").localeCompare(b.time || "");
+  if (groupA === 1) {
+   return (a.timestamp || 0) - (b.timestamp || 0);
+  }
+
+  if (groupA === 2) {
+   return (b.timestamp || 0) - (a.timestamp || 0);
   }
 
   return 0;
  });
+}
+
+function renderLogo(url, className, name) {
+ if (!url) return "";
+
+ return `<img
+  class="${className}"
+  src="${escapeHtml(url)}"
+  alt="${escapeHtml(name)}"
+  loading="lazy"
+  referrerpolicy="no-referrer"
+  onerror="this.style.display='none'"
+ >`;
 }
 
 function renderMatches(matches) {
@@ -174,22 +260,49 @@ function renderMatches(matches) {
     ? t("finished")
     : (m.time || t("scheduled"));
 
-  return `<article class="match-card">
-   <div class="match-meta">
-    <span>${escapeHtml(m.league)}</span>
-    <span class="status ${live ? "is-live" : ""}">
-     ${live ? "● " : ""}${escapeHtml(status)}
-    </span>
-   </div>
-   <div class="teams">
-    <span>${escapeHtml(m.home)}</span>
-    <strong class="score">${score}</strong>
-    <span>${escapeHtml(m.away)}</span>
-   </div>
-   <div class="match-foot">
-    ${live ? t("live") : finished ? t("finished") : t("scheduled")}
-   </div>
-  </article>`;
+  return `
+   <article class="match-card">
+
+    <div class="match-meta">
+     <span class="match-league">
+      ${renderLogo(m.leagueLogo, "league-logo", m.league)}
+      ${escapeHtml(m.league)}
+     </span>
+
+     <span class="status ${live ? "is-live" : ""}">
+      ${live ? "● " : ""}
+      ${escapeHtml(status)}
+     </span>
+    </div>
+
+    <div class="teams">
+
+     <div class="team">
+      ${renderLogo(m.homeLogo, "team-logo", m.home)}
+      <span class="team-name">${escapeHtml(m.home)}</span>
+     </div>
+
+     <strong class="score">${escapeHtml(score)}</strong>
+
+     <div class="team">
+      ${renderLogo(m.awayLogo, "team-logo", m.away)}
+      <span class="team-name">${escapeHtml(m.away)}</span>
+     </div>
+
+    </div>
+
+    <div class="match-foot">
+     <span>
+      ${live ? t("live") : finished ? t("finished") : t("scheduled")}
+     </span>
+
+     <span class="${!live && !finished ? "match-time" : ""}">
+      ${!live && !finished ? escapeHtml(m.time || "") : ""}
+     </span>
+    </div>
+
+   </article>
+  `;
  }).join("");
 }
 
@@ -209,27 +322,36 @@ async function loadMatches() {
  if (!base) {
   window.kooraMatches = demoMatches;
   renderMatches(demoMatches);
+
   $("#dataNotice").textContent = t("demo");
   $("#matchesStatus").textContent = t("demo_badge");
+
   return;
  }
 
  $("#matchesStatus").textContent = t("loading");
 
  try {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
   const url =
    base.replace(/\/$/, "") +
-   "/api/matches?date=" + today;
+   "/api/matches?date=" + encodeURIComponent(today);
 
-  const r = await fetch(url);
+  const response = await fetch(url, {
+   method: "GET",
+   cache: "no-store"
+  });
 
-  if (!r.ok) {
-   throw new Error("API " + r.status);
+  if (!response.ok) {
+   throw new Error("API " + response.status);
   }
 
-  const data = await r.json();
+  const data = await response.json();
+
+  if (data.errors && Object.keys(data.errors).length) {
+   throw new Error("API returned errors");
+  }
 
   window.kooraMatches = normalizeApi(data);
 
@@ -238,11 +360,10 @@ async function loadMatches() {
   $("#dataNotice").textContent = "";
 
   $("#matchesStatus").textContent =
-   t("updated") + ": " +
-   new Date().toLocaleTimeString();
+   t("updated") + ": " + getLocalTime(new Date());
 
- } catch (e) {
-  console.error("Koora API error:", e);
+ } catch (error) {
+  console.error("Koora API error:", error);
 
   $("#matchesStatus").textContent = t("api_error");
 
@@ -262,16 +383,16 @@ function renderStreams() {
   return;
  }
 
- box.innerHTML = streams.map(s =>
-  `<div class="stream-row">
+ box.innerHTML = streams.map(s => `
+  <div class="stream-row">
    <b>${escapeHtml(s.title)}</b>
    <a href="${escapeHtml(s.url)}"
       target="_blank"
       rel="noopener noreferrer">
     ${t("stream_link")}
    </a>
-  </div>`
- ).join("");
+  </div>
+ `).join("");
 }
 
 document.querySelectorAll(".filter").forEach(btn => {
@@ -299,5 +420,5 @@ setLanguage(lang);
 loadMatches();
 renderStreams();
 
-// التحديث كل 15 دقيقة لتقليل استهلاك طلبات API.
+// تحديث البيانات كل 15 دقيقة.
 setInterval(loadMatches, 15 * 60 * 1000);
