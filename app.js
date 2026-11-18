@@ -56,6 +56,7 @@ function getLocalTime(date) {
  ).format(date);
 }
 
+// تاريخ اليوم حسب جهاز الزائر
 function getLocalDate() {
  const parts = new Intl.DateTimeFormat("en-CA", {
   year: "numeric",
@@ -67,6 +68,11 @@ function getLocalDate() {
  parts.forEach(p => values[p.type] = p.value);
 
  return `${values.year}-${values.month}-${values.day}`;
+}
+
+// المنطقة الزمنية حسب جهاز الزائر
+function getLocalTimeZone() {
+ return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 function setLanguage(next) {
@@ -333,10 +339,17 @@ async function loadMatches() {
 
  try {
   const today = getLocalDate();
+  const timezone = getLocalTimeZone();
+
+  // إرسال التاريخ والمنطقة الزمنية إلى Cloudflare Worker
+  const params = new URLSearchParams({
+   date: today,
+   timezone: timezone
+  });
 
   const url =
    base.replace(/\/$/, "") +
-   "/api/matches?date=" + encodeURIComponent(today);
+   "/api/matches?" + params.toString();
 
   const response = await fetch(url, {
    method: "GET",
@@ -420,5 +433,5 @@ setLanguage(lang);
 loadMatches();
 renderStreams();
 
-// تحديث البيانات كل 15 دقيقة.
+// تحديث البيانات كل 15 دقيقة
 setInterval(loadMatches, 15 * 60 * 1000);
